@@ -5,6 +5,9 @@
 })(this, function() {
     this.supers = this.supers || {};
 
+    var toString = Object.prototype.toString;
+    var slice = Array.prototype.slice;
+
     supers.inherits = function(subClass, superClass) {
         function O() { this.consturctor = subClass };
         O.prototype = superClass.prototype;
@@ -15,7 +18,7 @@
         return typeof parent === 'function' && parent ? parent : self;
     }
     
-    supers.assign = Object.assign || function() {
+    var assign = Object.assign || function() {
         var args1 = argumnets[0];
         var args2 = arguments[1];
         var args3 = arguments[2];
@@ -40,6 +43,10 @@
     
     function isObject(obj) {
         return (typeof obj == 'object' || typeof obj === 'function') && !!obj;
+    }
+
+    var isArray = Array.isArray || function(obj) {
+        return toString.call(obj) === '[object Function]';
     }
 
     supers.log = {
@@ -123,11 +130,44 @@
         createElement: createElement
     })
 
-
+    /**
+     * canvas事件源类
+     */
     var Events = (function() {
         function Events() {
-            
+            this.events = {};
         };
+
+        /**
+         * 事件的添加（加入队列）
+         * @param {String} eventName: 事件触发名称
+         * @param {Function} func: 事件的方法
+         * @param {Boolean} capture: 捕获
+         */
+        Events.prototype.addEventListener = function() {
+            var eventName = arguments.length > 1 && arguments[0] ? arguments[0] : 'click';
+            var func = arguments.length >= 2 && arguments[1] ? arguments[1] : supers.log.error('this argument must be function!');
+            var capture = arguments[2] || false;
+
+            if(!this.events[eventName]) {
+                this.events[eventName] = [];
+            }
+            this.events[eventName].push(func);
+        }
+
+        Events.prototype.removeEventListener = function() {};
+        
+        Events.prototype.emit = function(name) {
+            var funcs = this.events[name];
+            var otherParams = slice.call(arguments, 1);
+
+            if(!isArray(funcs)) return;
+            for(var i = 0, func; func = funcs[i++];) {
+                func.apply(this, otherParams);
+            }
+            
+        }
+
         return Events;
     })();
 
@@ -268,21 +308,23 @@
      * type(required): 画图像的类型
      * @return {ctx}  返回绘画环境
      */
+    var borderRegexp = /\s*([\d]+)px\s+(solid|dash)\s+([^\/+={}"']+)/;
     var CanvasElement = (function(_Container) {
         supers.inherits(CanvasElement, _Container);
 
         function CanvasElement(options) {
             var _this = supers.possibleConstructorReturn(this, _Container.call(this));
+
+            // 默认属性的展示
             _this.width = 0;
             _this.height = 0;
-            supers.assign(_this, options || {});
-
-            // 区分不同类型的图形
-            _this.diffGraphicsType = function() {
-                return 'rect'
-            }
-
-            _this.type = _this.diffGraphicsType();
+            _this.backgroundColor = null;
+            _this.type = 'rect';
+            _this.border = '';
+            assign(_this, options || {});
+            console.log(_this)
+            // border处理
+            this.parserBorder(_this.border);
         }
 
         /**
@@ -292,10 +334,55 @@
         CanvasElement.prototype.rect = function(position) {
             this.updatePosition(position);
             var ctx = this.ctx;
+             
             ctx.beginPath();
             ctx.rect(position.left || 0, position.top || 0, this.width, this.height);
+
+            // 设置样式
+            // --设置border样式
+            ctx.lineWidth = this.borderWidth;
+            ctx.strokeStyle = this.borderColor;
+            this.borderStyle === 'solid' ? ctx.setLineDash([]) : ctx.setLineDash([5, 5]);
+
+            // --设置背景颜色
+            if(this.backgroundColor) {
+                ctx.fillStyle = this.backgroundColor;
+                ctx.fill();
+            }
             ctx.stroke();
+
         };
+
+        CanvasElement.prototype.text = function() {
+            var ctx = this.ctx;
+
+            ctx.beginPath();
+
+            ctx.fillStyle = 'black';
+            
+            ctx.textAlign = 'start'
+            ctx.font = '24px serif';
+            ctx.fillText(this.textContent, this.position.left, this.position.top + 24);
+
+        }
+
+        /**
+         * 解析border内容
+         * @param {String} border='1px solid red'
+         */
+        CanvasElement.prototype.parserBorder = function(border) {
+            var borderStr = border.match(borderRegexp);
+            // 默认border属性设置
+            this.borderWidth = 1;
+            this.borderStyle = 'solid';
+            this.borderColor = 'black';
+
+            if(borderStr) {
+                this.borderWidth = borderStr[1];
+                this.borderStyle = borderStr[2];
+                this.borderColor = borderStr[3];
+            }
+        }
 
         return CanvasElement;
     })(supers.Container);

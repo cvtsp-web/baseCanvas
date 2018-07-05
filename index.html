@@ -13,14 +13,20 @@
         var root = new supers.Container('print');
         var a = new supers.CanvasElement({
             width: 100,
-            height: 100
+            height: 100,
+            border: '1px dash black'
         });
-        var b = new supers.CanvasElement({
-            width: 780,
-            height: 50
-        })
+
+        var text = new supers.CanvasElement({
+            type: 'text',
+            textContent: 'hello'
+        });
+        
         root.appendChild(a);
-        root.appendChild(b);
+        a.appendChild(text);
+
+        
+
     </script>
 </body>
 </html>
