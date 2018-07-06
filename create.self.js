@@ -267,9 +267,9 @@
                     var top = (event.pageY - canvas.offsetTop) * _this.ratio;
 
                     _this.clearAllContent();
-                    _this.findChilds(_this.children, function(child) {
+                    _this.eachChilds(_this.children, function(child) {
                         // 绘制图形的方法
-                        child[child.type](null, function() {
+                        child.ctx && child[child.type](null, function() {
                             if(child.hasEvent(handler) && _this.ctx.isPointInPath(left, top)) {
                                 child.emit.apply(child, [handler, event]);   // 已经改变了属性
                             }
@@ -335,11 +335,11 @@
             this.position = position;
         }
 
-        Container.prototype.findChilds = function(childs, callback) {
+        Container.prototype.eachChilds = function(childs, callback) {
             if(isArray(childs) && childs.length > 0) {
                 for(var i = 0, child; child = childs[i++];) {
                     callback(child);
-                    this.findChilds(child.children, callback);
+                    this.eachChilds(child.children, callback);
                 }
             }
         }
@@ -381,12 +381,16 @@
             subInstance.ctx = superInstance.ctx;
             subInstance.parent = superInstance;
             subInstance.previousElementSibling = previousChild;
+            subInstance.position = position;
             previousChild && (previousChild.nextElementSibling = subInstance);
             
             if(this.ctx) {
-                subInstance[subInstance.type](position);
-            }
-            
+                // 有问题
+                subInstance[subInstance.type]();
+                this.eachChilds(subInstance.children, function(child) {
+                    child[child.type]();
+                })
+            }  
         }
 
         return Container;

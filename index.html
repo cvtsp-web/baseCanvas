@@ -13,8 +13,7 @@
         var root = new supers.Container('print');
         var div = new supers.CanvasElement({
             width: 100,
-            height: 50,
-            backgroundColor: 'red'
+            height: 50
         });
         var div1 = new supers.CanvasElement({
             width: 200,
@@ -22,7 +21,7 @@
             backgroundColor: 'green'
         })
 
-        div.appendChild(div1)
+        div.appendChild(div1);
         // ctx 存在 直接渲染图形 不存在 存储不渲染
         root.appendChild(div);
         
