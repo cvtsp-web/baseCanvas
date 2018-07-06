@@ -45,6 +45,13 @@
         return (typeof obj == 'object' || typeof obj === 'function') && !!obj;
     }
 
+    function isEmptyObject(obj) {
+        for(var i in obj) {
+            if(obj[i]) return false;
+        }
+        return true;
+    }
+
     var isArray = Array.isArray || function(obj) {
         return toString.call(obj) === '[object Function]';
     }
@@ -155,7 +162,39 @@
             this.events[eventName].push(func);
         }
 
-        Events.prototype.removeEventListener = function() {};
+        /**
+         * 是否存在当前的事件类型
+         * @return {Boolean} true: 存在
+         */
+        Events.prototype.hasEvent = function() {
+            var eventName = arguments.length >=1 && arguments[0] ? arguments[0] : null;
+
+            if(eventName) {
+                var lists = this.events[eventName];
+                return isArray(lists) && lists.length ? true : false;
+            }
+            return false;
+        }
+
+        /**
+         * 事件的删除
+         * @param {String} eventName: 事件删除的名称
+         * @param {Function} func
+         */
+        Events.prototype.removeEventListener = function() {
+            var eventName = arguments.length > 1 && arguments[0] ? arguments[0] : 'click';
+            var func = arguments.length >= 2 && arguments[1] ? arguments[1] : supers.log.error('this argument must be function!');
+            var capture = arguments[2] || false;
+
+            var lists = this.events[eventName];
+            if(eventName && isArray(lists)) {
+                for(var i = 0,list; list = lists[i++];) {
+                    if(list == func) {
+                        lists.splice(i-1, 1);
+                    }
+                }
+            }  
+        };
         
         Events.prototype.emit = function(name) {
             var funcs = this.events[name];
@@ -164,8 +203,7 @@
             if(!isArray(funcs)) return;
             for(var i = 0, func; func = funcs[i++];) {
                 func.apply(this, otherParams);
-            }
-            
+            }   
         }
 
         return Events;
@@ -176,42 +214,81 @@
      * 一个canvas只允许一个容器
      * @param {Element|String} canvasElement: canvas DOM元素
      */
-    var Container = (function() {
-        function Container(el) {
+    var HANDLER__GROUPS = [
+        'click', 
+        'touchstart', 'touchmove', 'touchmove'
+    ];
+    var Container = (function(_Events) {
+        supers.inherits(Container, _Events);
 
+        function Container(el) {
+            var _this = supers.possibleConstructorReturn(this, _Events.call(this));
+
+            // 当前分辨率
+            _this.ratio = 2;
             // 绘画环境
-            this.ctx = el && this.createContext(el);
+            _this.ctx = el && _this.createContext(el);
 
             // 当前元素
-            this.element = this;
+            _this.element = _this;
             // 当前位置
-            this.position = {left: 0, top: 0};
+            _this.position = {left: 0, top: 0};
 
             // 父元素
-            this.parent = null;
+            _this.parent = null;
 
             // 所有的子元素
-            this.children = [];
+            _this.children = [];
             
             // 上一个元素
-            this.previousElementSibling = null;
+            _this.previousElementSibling = null;
 
             // 下一个元素
-            this.nextElementSibling = null;
+            _this.nextElementSibling = null;
 
             // 元素的宽高
-            this.offsetWidth = null;
-            this.offsetHeight = null;
+            _this.offsetWidth = null;
+            _this.offsetHeight = null;
             
             // 元素的边距
-            this.offsetLeft = null;
-            this.offsetTop = null;
+            _this.offsetLeft = null;
+            _this.offsetTop = null;
+
+            this._handlerEvents();
+        }
+
+        Container.prototype._handlerEvents = function() {
+            var _this = this;
+
+            _this.ctx && HANDLER__GROUPS.forEach(function(handler) {
+                var canvas = _this.ctx.canvas;
+                canvas.addEventListener(handler, function(event) {
+                    var left = (event.pageX - canvas.offsetLeft) * _this.ratio;
+                    var top = (event.pageY - canvas.offsetTop) * _this.ratio;
+
+                    _this.clearAllContent();
+                    _this.findChilds(_this.children, function(child) {
+                        // 绘制图形的方法
+                        child[child.type](null, function() {
+                            if(child.hasEvent(handler) && _this.ctx.isPointInPath(left, top)) {
+                                child.emit.apply(child, [handler, event]);   // 已经改变了属性
+                            }
+                        })
+                    })
+                })
+            });
+        }
+
+        Container.prototype.clearAllContent = function() {
+            var canvas = this.ctx.canvas;
+            if(!canvas) return supers.log.error('canvas is not element!');
+            this.ctx.clearRect(0, 0, canvas.offsetWidth, canvas.offsetHeight);
         }
 
         /**
          * canvas DOM元素
          * @param {Element|String} id 
-         * @return {CanvasContext} 获得一个canvas画布的环境
+         * @return {CanvasContext} 返回一个canvas画布的环境
          */
         Container.prototype.createContext = function(el) {
             var ctx = void 0;
@@ -231,8 +308,8 @@
             });
 
             canvasEl.setAttributes({
-                width: elSize.width * 2,
-                height: elSize.height * 2
+                width: elSize.width * this.ratio,
+                height: elSize.height * this.ratio
             });
             setStyle(canvasEl, {
                 width: elSize.width,
@@ -240,9 +317,31 @@
             });
             el.appendChild(canvasEl);
             ctx = document.getElementById(canvasName).getContext('2d');
-            ctx.scale(2, 2);
+            ctx.scale(this.ratio, this.ratio);
             ctx.translate(1, 1);
             return ctx;
+        }
+
+        Container.prototype.update = function() {
+            
+        }
+
+        /**
+         * 更新当前的位置坐标
+         * @param {Object} position={left, top}
+         */
+        Container.prototype.updatePosition = function(position) {
+            if(!isObject(position)) return supers.log.error('position is must be Object,example: {left: 0,top:0}');
+            this.position = position;
+        }
+
+        Container.prototype.findChilds = function(childs, callback) {
+            if(isArray(childs) && childs.length > 0) {
+                for(var i = 0, child; child = childs[i++];) {
+                    callback(child);
+                    this.findChilds(child.children, callback);
+                }
+            }
         }
 
         /**
@@ -255,15 +354,6 @@
             this.inherits(canvasEl, this);
             this.children.push(canvasEl);
         }   
-
-        /**
-         * 更新当前的位置坐标
-         * @param {Object} position={left, top}
-         */
-        Container.prototype.updatePosition = function(position) {
-            if(!isObject(position)) return supers.log.error('position is must be Object,example: {left: 0,top:0}');
-            this.position = position;
-        }
 
         /**
          * 子元素继承父元素的属性
@@ -292,12 +382,15 @@
             subInstance.parent = superInstance;
             subInstance.previousElementSibling = previousChild;
             previousChild && (previousChild.nextElementSibling = subInstance);
-  
-            subInstance[subInstance.type](position);
+            
+            if(this.ctx) {
+                subInstance[subInstance.type](position);
+            }
+            
         }
 
         return Container;
-    })();
+    })(Events);
     supers.Container = Container;
 
 
@@ -322,7 +415,6 @@
             _this.type = 'rect';
             _this.border = '';
             assign(_this, options || {});
-            console.log(_this)
             // border处理
             this.parserBorder(_this.border);
         }
@@ -331,26 +423,31 @@
          * 绘制矩形
          * @param {Object} position={left, top}
          */
-        CanvasElement.prototype.rect = function(position) {
-            this.updatePosition(position);
+        CanvasElement.prototype.rect = function(position, callback) {
+            // 位置默认为{}
+            position = position || {};
+            !isEmptyObject(position) && this.updatePosition(position);
             var ctx = this.ctx;
-             
-            ctx.beginPath();
-            ctx.rect(position.left || 0, position.top || 0, this.width, this.height);
 
+            ctx.beginPath();   
+            ctx.rect(
+                position.left || this.position.left, 
+                position.top || this.position.top, 
+                this.width, 
+                this.height);
+            
+            callback && callback();
             // 设置样式
             // --设置border样式
             ctx.lineWidth = this.borderWidth;
             ctx.strokeStyle = this.borderColor;
             this.borderStyle === 'solid' ? ctx.setLineDash([]) : ctx.setLineDash([5, 5]);
+            this.backgroundColor && (ctx.fillStyle = this.backgroundColor);
+            ctx.closePath();
+            
 
-            // --设置背景颜色
-            if(this.backgroundColor) {
-                ctx.fillStyle = this.backgroundColor;
-                ctx.fill();
-            }
+            this.backgroundColor && ctx.fill();
             ctx.stroke();
-
         };
 
         CanvasElement.prototype.text = function() {
@@ -359,8 +456,6 @@
             ctx.beginPath();
 
             ctx.fillStyle = 'black';
-            
-            ctx.textAlign = 'start'
             ctx.font = '24px serif';
             ctx.fillText(this.textContent, this.position.left, this.position.top + 24);
 
