@@ -269,7 +269,7 @@
                     _this.clearAllContent();
                     _this.eachChilds(_this.children, _this, function(child) {
                         // 绘制图形的方法
-                        child.ctx && child[child.type](null, function() {
+                        child.ctx && child[child.type](function() {
                             if(child.hasEvent(handler) && _this.ctx.isPointInPath(left, top)) {
                                 child.emit.apply(child, [handler, event]);   // 已经改变了属性
                             }
@@ -436,7 +436,7 @@
      * @return {ctx}  返回绘画环境
      */
     var borderRegexp = /\s*([\d]+)px\s+(solid|dash)\s+([^\/+={}"']+)/;
-    var borderRadiusRegexp = /(([\d]+px)\s*){,4}/g;
+    var borderRadiusRegexp = /(([\d]+[px%])\s*)/g;   
     var CanvasElement = (function(_Container) {
         supers.inherits(CanvasElement, _Container);
 
@@ -450,7 +450,7 @@
             _this.backgroundColor = null;
             _this.border = '';
 
-            _this.borderRadius = 0;
+            _this.borderRadius = '';
             _this.borderTopLeftRadius = 0;
             _this.borderTopRightRadius = 0;
             _this.borderBottomRightRadius = 0;
@@ -459,26 +459,10 @@
             assign(_this, options || {});
             // border处理
             this.parserBorder(_this.border);
+            this.parserBorderRadius(_this.borderRadius);
         }
 
-        /**
-         * 绘制矩形
-         * @param {Object} position={left, top}
-         */
-        CanvasElement.prototype.rect = function(position, callback) {
-            // 位置默认为{}
-            position = position || {};
-            !isEmptyObject(position) && this.updatePosition(position);
-            var ctx = this.ctx;
-
-            ctx.beginPath();   
-            ctx.rect(
-                position.left || this.position.left, 
-                position.top || this.position.top, 
-                this.width, 
-                this.height);
-            
-            callback && callback();
+        CanvasElement.prototype.setStyle = function(ctx) {
             // 设置样式
             // --设置border样式
             ctx.lineWidth = this.borderWidth;
@@ -490,6 +474,28 @@
             
             this.backgroundColor && ctx.fill();
             ctx.stroke();
+        }
+
+        /**
+         * 绘制矩形
+         * @param {Object} position={left, top}
+         */
+        CanvasElement.prototype.rect = function(callback) {
+            // 位置默认为{}
+            if(this.isArc()) return this.arc();
+            var ctx = this.ctx;
+
+            ctx.beginPath();   
+            ctx.rect(
+                this.position.left, 
+                this.position.top, 
+                this.width, 
+                this.height);
+            
+            callback && callback();
+            // 设置样式
+            // --设置border样式
+            this.setStyle(ctx);
         };
 
         CanvasElement.prototype.text = function() {
@@ -499,6 +505,31 @@
             ctx.fillStyle = 'black';
             ctx.font = '24px serif';
             ctx.fillText(this.textContent, this.position.left, this.position.top + 24);
+        }
+
+        /**
+         * 2*Math.PI/360 = 弧度角/角度
+         * @param {*} callback 
+         */
+        CanvasElement.prototype.arc = function(callback) {
+            var ctx = this.ctx;
+
+            ctx.beginPath();
+            ctx.arc(0, 0, 100, (Math.PI/180)*30, (Math.PI/180)*60);
+            this.setStyle(ctx);
+        }
+        CanvasElement.prototype.isArc = function() {
+            if( 
+                this.type === 'rect' &&
+                (this.borderRadius ||
+                this.borderTopLeftRadius ||
+                this.borderTopRightRadius ||
+                this.borderBottomRightRadius ||
+                this.borderBottomLeftRadius)
+            ) {
+                return true;
+            }
+            return false;
         }
 
         /**
@@ -519,9 +550,39 @@
             }
         }
 
+        /**
+         * 解析borderRadius内容
+         * @example borderTopLeftRadius = [水平半径，垂直半径]
+         * @param {String} borderRadius="2px" | "1px 3px 4px 10px"
+         */
         CanvasElement.prototype.parserBorderRadius = function(borderRadius) {
+            var _this = this;
             var borderRadius = borderRadius.match(borderRadiusRegexp);
-            console.log(borderRadius)
+            if(borderRadius) {
+                // 内容为一
+                if(borderRadius.length === 1) {
+                    var result = borderRadius[0];
+                    var result_num = parseFloat(result);
+                    if(/p/g.test(result)) {
+                        this.borderTopLeftRadius = [result_num, result_num];
+                        this.borderTopRightRadius = [result_num, result_num];
+                        this.borderBottomRightRadius = [result_num, result_num];
+                        this.borderBottomLeftRadius = [result_num, result_num];
+                        return;
+                    }
+                    if(/%/g.test(result)) {
+                        var width = this.width * (result_num/100);
+                        var height = this.height * (result_num/100);
+                        this.borderTopLeftRadius = [width, height];
+                        this.borderTopRightRadius = [width, height];
+                        this.borderBottomRightRadius = [width, height];
+                        this.borderBottomLeftRadius = [width, height];
+                        return;
+                    }
+                }
+            }
+
+
         }
 
         return CanvasElement;
