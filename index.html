@@ -7,25 +7,25 @@
     <title>Document</title>
 </head>
 <body>
-    <div id="print" style="height:200px"></div>
+    <div id="print" style="height:800px"></div>
     <script src="./create.self.js"></script>
     <script>
         var root = new supers.Container('print');
-        var div = new supers.CanvasElement({
-            width: 100,
-            height: 50
-        });
-        var div1 = new supers.CanvasElement({
-            width: 200,
-            height: 100,
-            backgroundColor: 'green'
+        var header = new supers.CanvasElement({
+            width: 880,
+            height: 50,
+            backgroundColor: 'red',
+            borderRadius: '2px' 
+        })
+        var container = new supers.CanvasElement({
+            width: 880,
+            height: 500,
+            backgroundColor: 'pink'
         })
 
-        div.appendChild(div1);
-        // ctx 存在 直接渲染图形 不存在 存储不渲染
-        root.appendChild(div);
-        
-        
+
+        root.appendChild(header);
+        root.appendChild(container);
     </script>
 </body>
 </html>

@@ -267,7 +267,7 @@
                     var top = (event.pageY - canvas.offsetTop) * _this.ratio;
 
                     _this.clearAllContent();
-                    _this.eachChilds(_this.children, function(child) {
+                    _this.eachChilds(_this.children, _this, function(child) {
                         // 绘制图形的方法
                         child.ctx && child[child.type](null, function() {
                             if(child.hasEvent(handler) && _this.ctx.isPointInPath(left, top)) {
@@ -322,10 +322,6 @@
             return ctx;
         }
 
-        Container.prototype.update = function() {
-            
-        }
-
         /**
          * 更新当前的位置坐标
          * @param {Object} position={left, top}
@@ -335,11 +331,17 @@
             this.position = position;
         }
 
-        Container.prototype.eachChilds = function(childs, callback) {
+        /**
+         * 遍历所有的子元素
+         * @param {Array} childs=[CanvasElement, CanvasElement ...]
+         * @param {CanvasElement} parent 
+         * @param {Function} callback 
+         */
+        Container.prototype.eachChilds = function(childs, parent, callback) {
             if(isArray(childs) && childs.length > 0) {
                 for(var i = 0, child; child = childs[i++];) {
-                    callback(child);
-                    this.eachChilds(child.children, callback);
+                    callback(child, parent);
+                    this.eachChilds(child.children, child, callback);
                 }
             }
         }
@@ -349,9 +351,19 @@
          * @param {CanvasElement} CanvasElement的实例
          */
         Container.prototype.appendChild = function() {
+            var _this = this;
             var canvasEl = arguments[0];   // 当前元素
 
-            this.inherits(canvasEl, this);
+            this.inherits(canvasEl, this);     // 当前元素继承了父元素的属性 *       
+            if(this.ctx) {    
+                canvasEl[canvasEl.type]();        // 绘制当前元素
+                this.eachChilds(canvasEl.children, canvasEl, function(child, parent) {         
+                    // 绘制当前元素的子元素
+                    child.ctx = parent.ctx;
+                    child.position = detailInheritsPosition(child.ctx, child, parent);
+                    child[child.type]();
+                })
+            };
             this.children.push(canvasEl);
         }   
 
@@ -363,9 +375,9 @@
          */
         Container.prototype.inherits = function(subInstance, superInstance) {
             var previousChild = this.children[this.children.length - 1 ];  // 上一个子元素
-            var position = {left: 0, top: 0}; //previousChild ? previousChild.position : 
-
-            if(previousChild) {
+            var position = {left: superInstance.position.left, top: superInstance.position.top}; //previousChild ? previousChild.position : 
+            
+            if(this.ctx && previousChild) {
                 // 前一个的位置 + 前一个本身的宽度 = 当前的位置
                 var left = previousChild.position.left + (previousChild.width || 0);
                 var top = previousChild.position.top;
@@ -374,23 +386,41 @@
                 // 当前位置超出总长度  需要移到下一行
                 if((left+subInstance.width) > (canvas.offsetWidth || 0)) {
                     top = top + (previousChild.height || 0);
-                    left = this.position.left;
+                    left = superInstance.position.left;
                 } 
                 position = { left: left, top: top};
             }
+
             subInstance.ctx = superInstance.ctx;
             subInstance.parent = superInstance;
             subInstance.previousElementSibling = previousChild;
             subInstance.position = position;
             previousChild && (previousChild.nextElementSibling = subInstance);
-            
-            if(this.ctx) {
-                // 有问题
-                subInstance[subInstance.type]();
-                this.eachChilds(subInstance.children, function(child) {
-                    child[child.type]();
-                })
-            }  
+        }
+
+        /**
+         * 处理继承位置
+         * @return {Object} position
+         */
+        function detailInheritsPosition(ctx, child, parent) {
+            var previousChild = child.previousElementSibling;
+            var position = {left: parent.position.left, top: parent.position.top};
+
+            if(ctx && previousChild) {
+                // 前一个的位置 + 前一个本身的宽度 = 当前的位置
+                var left = previousChild.position.left + (previousChild.width || 0);
+                var top = previousChild.position.top;
+                var canvas = ctx.canvas;
+
+                // 当前位置超出总长度  需要移到下一行
+                if((left+child.width) > (canvas.offsetWidth || 0)) {
+                    top = top + (previousChild.height || 0);
+                    left = parent.position.left;
+                } 
+                position = { left: left, top: top};
+            }
+
+            return position;
         }
 
         return Container;
@@ -406,18 +436,26 @@
      * @return {ctx}  返回绘画环境
      */
     var borderRegexp = /\s*([\d]+)px\s+(solid|dash)\s+([^\/+={}"']+)/;
+    var borderRadiusRegexp = /(([\d]+px)\s*){,4}/g;
     var CanvasElement = (function(_Container) {
         supers.inherits(CanvasElement, _Container);
 
         function CanvasElement(options) {
             var _this = supers.possibleConstructorReturn(this, _Container.call(this));
 
-            // 默认属性的展示
+            // 图形的默认基本属性
+            _this.type = 'rect';
             _this.width = 0;
             _this.height = 0;
             _this.backgroundColor = null;
-            _this.type = 'rect';
             _this.border = '';
+
+            _this.borderRadius = 0;
+            _this.borderTopLeftRadius = 0;
+            _this.borderTopRightRadius = 0;
+            _this.borderBottomRightRadius = 0;
+            _this.borderBottomLeftRadius = 0;
+            
             assign(_this, options || {});
             // border处理
             this.parserBorder(_this.border);
@@ -445,24 +483,22 @@
             // --设置border样式
             ctx.lineWidth = this.borderWidth;
             ctx.strokeStyle = this.borderColor;
-            this.borderStyle === 'solid' ? ctx.setLineDash([]) : ctx.setLineDash([5, 5]);
+            this.borderStyle === 'solid' && ctx.setLineDash([]);
+            this.borderStyle === 'dash' && ctx.setLineDash([5, 5]);
             this.backgroundColor && (ctx.fillStyle = this.backgroundColor);
             ctx.closePath();
             
-
             this.backgroundColor && ctx.fill();
             ctx.stroke();
         };
 
         CanvasElement.prototype.text = function() {
             var ctx = this.ctx;
-
             ctx.beginPath();
-
+            
             ctx.fillStyle = 'black';
             ctx.font = '24px serif';
             ctx.fillText(this.textContent, this.position.left, this.position.top + 24);
-
         }
 
         /**
@@ -472,15 +508,20 @@
         CanvasElement.prototype.parserBorder = function(border) {
             var borderStr = border.match(borderRegexp);
             // 默认border属性设置
-            this.borderWidth = 1;
-            this.borderStyle = 'solid';
-            this.borderColor = 'black';
+            this.borderWidth = 0;
+            this.borderStyle = '';
+            this.borderColor = '';
 
             if(borderStr) {
                 this.borderWidth = borderStr[1];
                 this.borderStyle = borderStr[2];
                 this.borderColor = borderStr[3];
             }
+        }
+
+        CanvasElement.prototype.parserBorderRadius = function(borderRadius) {
+            var borderRadius = borderRadius.match(borderRadiusRegexp);
+            console.log(borderRadius)
         }
 
         return CanvasElement;
