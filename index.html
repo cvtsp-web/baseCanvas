@@ -7,24 +7,36 @@
     <title>Document</title>
 </head>
 <body>
-    <div id="print" style="height:800px"></div>
+    <div id="print" style="height:720px;"></div>
     <script src="./create.self.js"></script>
     <script>
         var root = new supers.Container('print');
-        var header = new supers.CanvasElement({
-            width: 880,
-            height: 120,
-            borderRadius: '20px 20%'
-        })
-        var container = new supers.CanvasElement({
-            width: 880,
-            height: 500,
-            backgroundColor: 'pink'
-        })
-
-
-        root.appendChild(header);
-        root.appendChild(container);
+        
+        var Coordinate = (function() {
+            function Coordinate() {
+                var ceil = 40;
+                for(var i = 0; i<18; i++) {
+                    var horizontalCoordinate = new supers.CanvasElement({
+                        width: 40 * 17,
+                        height: 1,
+                        top: i * ceil
+                    });
+                    root.appendChild(horizontalCoordinate);
+                }
+                for(var j = 0; j<18; j++) {
+                    var verticalCoordinate = new supers.CanvasElement({
+                        width: 1,
+                        height: 40 * 17,
+                        top: 0,
+                        left: j * ceil
+                    });
+                    root.appendChild(verticalCoordinate);   
+                }
+                
+            };
+            return Coordinate;
+        })();
+        new Coordinate();
     </script>
 </body>
 </html>

@@ -206,6 +206,7 @@
             }   
         }
 
+        Events.prototype.on = Events.prototype.addEventListener;
         return Events;
     })();
 
@@ -216,6 +217,7 @@
      */
     var HANDLER__GROUPS = [
         'click', 
+        
         'touchstart', 'touchmove', 'touchmove'
     ];
     var Container = (function(_Events) {
@@ -229,6 +231,12 @@
             // 绘画环境
             _this.ctx = el && _this.createContext(el);
 
+            if(_this.ctx) {
+                var canvas = _this.ctx.canvas;
+                _this.width = canvas.offsetWidth;
+                _this.height = canvas.offsetHeight;
+            }
+            
             // 当前元素
             _this.element = _this;
             // 当前位置
@@ -262,10 +270,10 @@
 
             _this.ctx && HANDLER__GROUPS.forEach(function(handler) {
                 var canvas = _this.ctx.canvas;
-                canvas.addEventListener(handler, function(event) {
+                canvas.addEventListener(handler, function(event) {               
                     var left = (event.pageX - canvas.offsetLeft) * _this.ratio;
                     var top = (event.pageY - canvas.offsetTop) * _this.ratio;
-
+                    
                     _this.clearAllContent();
                     _this.eachChilds(_this.children, _this, function(child) {
                         // 绘制图形的方法
@@ -351,7 +359,6 @@
          * @param {CanvasElement} CanvasElement的实例
          */
         Container.prototype.appendChild = function() {
-            var _this = this;
             var canvasEl = arguments[0];   // 当前元素
 
             this.inherits(canvasEl, this);     // 当前元素继承了父元素的属性 *       
@@ -396,6 +403,7 @@
             subInstance.previousElementSibling = previousChild;
             subInstance.position = position;
             previousChild && (previousChild.nextElementSibling = subInstance);
+            subInstance.inheritsFinish();
         }
 
         /**
@@ -456,10 +464,22 @@
             _this.borderBottomRightRadius = 0;
             _this.borderBottomLeftRadius = 0;
             
+            // 位置
+            _this.left = null;
+            _this.top = null;
             assign(_this, options || {});
+        }
+
+        /**
+         * 继承仪式完成
+         */
+        CanvasElement.prototype.inheritsFinish = function() {
+            // width height 处理
+            this.parserSize();
             // border处理
-            this.parserBorder(_this.border);
-            this.parserBorderRadius(_this.borderRadius);
+            this.parserBorder(this.border);
+            // borderRadius处理
+            this.parserBorderRadius(this.borderRadius);
         }
 
         CanvasElement.prototype.setStyle = function(ctx) {
@@ -482,13 +502,13 @@
          */
         CanvasElement.prototype.rect = function(callback) {
             // 位置默认为{}
-            if(this.isArc()) return this.arc();
+            if(this.isRectRound()) return this.reactRound();
             var ctx = this.ctx;
 
             ctx.beginPath();   
             ctx.rect(
-                this.position.left, 
-                this.position.top, 
+                (this.left || this.left === 0) ? this.left : this.position.left, 
+                (this.top || this.top === 0) ? this.top: this.position.top, 
                 this.width, 
                 this.height);
             
@@ -498,10 +518,11 @@
             this.setStyle(ctx);
         };
 
-        CanvasElement.prototype.text = function() {
+        CanvasElement.prototype.text = function(callback) {
             var ctx = this.ctx;
             ctx.beginPath();
             
+            callback && callback();
             ctx.fillStyle = 'black';
             ctx.font = '24px serif';
             ctx.fillText(this.textContent, this.position.left, this.position.top + 24);
@@ -511,14 +532,46 @@
          * 2*Math.PI/360 = 弧度角/角度
          * @param {*} callback 
          */
-        CanvasElement.prototype.arc = function(callback) {
+        CanvasElement.prototype.reactRound = function(callback) {
             var ctx = this.ctx;
-
+            
             ctx.beginPath();
-            ctx.arc(0, 0, 100, (Math.PI/180)*30, (Math.PI/180)*60);
+            ctx.moveTo(this.position.left + this.borderTopLeftRadius[0], this.position.top);    
+            // 右上角度
+            ctx.arcTo(
+                this.width, 
+                this.position.top, 
+                this.width, 
+                this.position.top + this.borderTopRightRadius[1],  
+                Math.min.apply(null, this.borderTopRightRadius));
+            // 右下角度
+            ctx.arcTo(
+                this.width, 
+                this.position.top + this.height, 
+                this.width - this.borderBottomRightRadius[0],
+                this.position.top + this.height,
+                Math.min.apply(null, this.borderBottomRightRadius));
+            // 左下角度
+            ctx.arcTo(
+                this.position.left,
+                this.height,
+                this.position.left,
+                this.height - this.borderBottomLeftRadius[1],
+                Math.min.apply(null, this.borderBottomLeftRadius)
+            )
+            // 左上角度
+            ctx.arcTo(
+                this.position.left,
+                this.position.top,
+                this.position.left + this.borderTopLeftRadius[0],
+                this.position.top,
+                Math.min.apply(null, this.borderTopLeftRadius)
+            );
+
+            callback && callback();
             this.setStyle(ctx);
         }
-        CanvasElement.prototype.isArc = function() {
+        CanvasElement.prototype.isRectRound = function() {
             if( 
                 this.type === 'rect' &&
                 (this.borderRadius ||
@@ -530,6 +583,20 @@
                 return true;
             }
             return false;
+        }
+
+        /**
+         * 解析size(width, height)内容
+         */
+        CanvasElement.prototype.parserSize = function() {
+            if(!this.parent) return;
+            if(/%/g.test(this.width)) {
+                this.width = this.parent.width * (parseFloat(this.width)/100);
+                console.log(this.width)
+            }
+            if(/%/g.test(this.height)) {
+                this.height = this.parent.height * (parseFloat(this.height)/100);
+            }
         }
 
         /**
@@ -579,6 +646,30 @@
                         this.borderBottomLeftRadius = [width, height];
                         return;
                     }
+                }
+                // 内容为二
+                if(borderRadius.length === 2) {
+                    var horizontal = borderRadius[0];
+                    var vertical = borderRadius[1];
+
+                    if(/p/g.test(horizontal)) {
+                        horizontal = parseFloat(horizontal);
+                    } 
+                    if(/%/g.test(horizontal)) {
+                        horizontal = this.width * (horizontal/100);
+                    }
+                    if(/p/g.test(vertical)) {
+                        vertical = parseFloat(vertical);
+                    } 
+                    if(/%/g.test(vertical)) {
+                        vertical = this.height * (vertical/100);
+                    }
+
+                    this.borderTopLeftRadius = [horizontal, vertical];
+                    this.borderTopRightRadius = [horizontal, vertical];
+                    this.borderBottomRightRadius = [horizontal, vertical];
+                    this.borderBottomLeftRadius = [horizontal, vertical];
+                    return;
                 }
             }
 
